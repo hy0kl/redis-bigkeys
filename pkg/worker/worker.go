@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 
 	"github.com/hy0kl/gtools"
 
@@ -36,6 +37,8 @@ func (s bigKeysList) Swap(i, j int) {
 }
 
 func write(fp *os.File, box bigKeysList) {
+	sort.Sort(box)
+
 	fp.WriteString("database,type,key,size,ttl,scan_time\n")
 
 	for _, item := range box {
@@ -75,20 +78,30 @@ func Run(ctx context.Context, cancelFn context.CancelFunc) {
 
 	rdsClient := wredis.NewClient()
 
-	var scan uint64
+	var (
+		scan      uint64 // 游标
+		scanned   int64  // 已扫描的
+		scanCount = cfg.Section(`app`).Key(`scanCount`).MustInt64()
+	)
+
+	if scanCount < 10 || scanCount > 2000 {
+		scanCount = 500
+	}
 
 	for {
 		if isShuttingDown(ctx) {
-			log.Println(`收到退出信号`)
+			log.Printf(`收到退出信号, 当前游标: %d`, scan)
 			break
 		}
 
 		var scanRet []string
-		scanRet, scan = rdsClient.Scan(ctx, scan, ``, 500).Val()
+		scanRet, scan = rdsClient.Scan(ctx, scan, ``, scanCount).Val()
 
 		log.Printf(`scan: %d`, scan)
 
 		for _, key := range scanRet {
+			scanned++
+
 			item := bigKeysItem{
 				KeyType: rdsClient.Type(ctx, key).Val(),
 				KeyName: key,
@@ -107,6 +120,8 @@ func Run(ctx context.Context, cancelFn context.CancelFunc) {
 			break
 		}
 	}
+
+	log.Printf(`总扫描数: %d`, scanned)
 
 	write(outputFile, list)
 
