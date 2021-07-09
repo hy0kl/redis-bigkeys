@@ -97,7 +97,7 @@ func Run(ctx context.Context, cancelFn context.CancelFunc) {
 		var scanRet []string
 		scanRet, scan = rdsClient.Scan(ctx, scan, ``, scanCount).Val()
 
-		log.Printf(`scan: %d`, scan)
+		log.Printf(`当前游标 scan: %d`, scan)
 
 		for _, key := range scanRet {
 			scanned++
